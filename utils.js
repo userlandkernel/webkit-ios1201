@@ -294,7 +294,7 @@ function issupported()
 	for(i = 0; i < supported_targets.length; i++)
 	{
 		var tgt = supported_targets[i];
-		if(d.device.includes(tgt.device) && tgt.osvers == d.os.version && d.webkit == tgt.webkit || "any")
+		if(d.device.includes(tgt.device) && (tgt.osvers == d.os.version) && ((d.webkit == tgt.webkit) || tgt.webkit == "any"))
 		{
 			return true;
 		}
