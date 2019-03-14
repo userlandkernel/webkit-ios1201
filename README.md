@@ -17,3 +17,5 @@ It's a 1day, it's patched and I hate having to codesign unc0ver.
 - Int64 library by @5aelo
 
 
+## Notes
+- Tesmacho is not an actual payload it's 32-bit, just there for example purposes.
