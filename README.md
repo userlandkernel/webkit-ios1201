@@ -11,7 +11,7 @@ It's a 1day, it's patched and I hate having to codesign unc0ver.
 
 ## Credits
 - Regex exploit by Linus Henze.
-- Mach-O loader by Luca Todesco.
+- Mach-O loader (+jitMemCpy) by Luca Todesco.
 - Technique by Niklas Baumstark.
 - Mach_Swap by Ben Sparkes, S0rryMyBad and Brandon Azad
 - Int64 library by @5aelo
