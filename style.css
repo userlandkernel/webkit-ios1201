@@ -1,0 +1,48 @@
+* {
+	font-family: "SF Text", "Myrad pro", Arial, "Lucida Sans";
+	font-weight: bold;
+}
+
+body {
+	text-align: center;
+}
+
+button {
+	outline: none;
+	border: 0;
+	width:  100%;
+	min-height: 50px;
+	color: blue;
+	font-size:  17pt;
+	cursor: pointer;
+}
+button:active, button:hover {
+	outline: none;
+	border: none;
+	background: transparent;
+	color: silver;
+}
+.unsupported {
+	outline: none;
+	border: none;
+	background: transparent;
+	color: silver;
+}
+
+header {
+	position: relative;
+	top: 0;
+	
+}
+
+main {
+	margin-top: 9.3%;
+	position: relative;
+}
+
+footer {
+	position: absolute;
+	bottom: 0;
+	margin-left: 12.5%;
+	margin-right: 12.5%;
+}
