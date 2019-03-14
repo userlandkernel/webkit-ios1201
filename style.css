@@ -13,6 +13,7 @@ button {
 	width:  100%;
 	min-height: 50px;
 	color: blue;
+	background: transparent;
 	font-size:  17pt;
 	cursor: pointer;
 }
