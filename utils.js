@@ -270,9 +270,14 @@ function detect_os()
 
 function fingerprint_osdevice()
 {
-	var device = detect_device();
-	var os = detect_os();
-	return {device: device, os: os};
+	if(typeof window.currentdevice !== 'undefined')
+	{
+		return window.currentdevice;
+	}
+	var _device = detect_device();
+	var _os = detect_os();
+	window.currentdevice = {device: _device, os: _os};
+	return {device: _device, os: _os};
 }
 
 var supported_targets = [
@@ -300,6 +305,29 @@ function issupported()
 		}
 	}
 	return false;
+}
+
+function assert_offsets()
+{
+	function missing_offsets(req='iOS version'){
+		var btn = document.querySelector("#btn");
+		btn.innerText = "unsupported";
+		btn.setAttribute('class','unsupported');
+		btn.onclick = function(){alert('You need to add offsets for your '+req+'.');};
+		throw "Missing offsets";
+	}
+
+	// Real dirty, this should be based off device detection, see utils.js
+	// The offsets here are from 12.0.1 iPhone 6S
+	if(typeof offsets[currentdevice.os.version] === 'undefined')
+	{
+		missing_offsets();
+	}
+
+	if(typeof offsets[currentdevice.os.version][currentdevice.device[0]] === 'undefined')
+	{
+		missing_offsets("device");
+	}
 }
 
 function str2ab(str = '')

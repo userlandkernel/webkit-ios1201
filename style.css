@@ -23,7 +23,7 @@ button:active, button:hover {
 	background: transparent;
 	color: silver;
 }
-.unsupported {
+.unsupported, .disabled {
 	outline: none;
 	border: none;
 	background: transparent;

