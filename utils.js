@@ -86,7 +86,7 @@ var unslideaddr = function(addr = 0)
 /*
  * Logging functionality
 */
-
+//window.alert = function(){};
 var log = {
 
 	debug: false,
@@ -335,37 +335,24 @@ function str2ab(str = '')
 	return new TextEncoder().encode(str).buffer;
 };
 
-function load_shellcode(url = '')
+function load_shellcode(url = '', async = true, name='shellcode_view', callback = function(req){})
 {
 	var req = new XMLHttpRequest();
-	req.open("GET", url, false);
-	req.send(null);
-	var buf = str2ab(req.responseText);
-	var x = buf.byteLength; // check how big our buffer is
-	while(x % 8 != 0) // We need to align the buffer to a multiple of 8 for the Float64 primitive to work
-	{
-		x++; // We keep increasing the remap size until we are aligned
+	req.open("GET", url, async);
+	if(async){
+		req.responseType = "arraybuffer";
+		if(callback){
+			req.addEventListener('load', callback);
+			req.send(null);
+			return;
+		} else {
+			req.send(null);
+		}
+	} 
+	else {
+		req.send(null);
+		return req.responseText;
 	}
-
-	if(x != buf.byteLength) // We only should take effort to remap if the buffer is not aligned
-	{
-		var remap = new Uint8Array(new ArrayBuffer(x));
-		remap.set(new Uint8Array(buf));
-		buf = remap.buffer;
-	}
-	
-	// Craft and return our read / write primitives for the buffer :)
-	return {
-		buf: buf,
-		i8: new Int8Array(buf), // i = signed int
-		i16: new Int16Array(buf),
-		i32: new Int32Array(buf),
-		u8: new Uint8Array(buf), // u = unsigned int
-		u16: new Uint16Array(buf),
-		u32: new Uint32Array(buf),
-		f32: new Float32Array(buf), // f = float
-		f64: new Float64Array(buf)
-	};
 };
 
 var spectre = (typeof SharedArrayBuffer !== 'undefined'); 
